@@ -1,6 +1,6 @@
 ;;; ============================================================
 ;;; DrawingHealthScore.lsp  (DHS / DHSFIX)
-;;; Drawing Health Score Tool - Pro v5.0 (Dynamic Scoring & True Save)
+;;; Drawing Health Score Tool - Pro v5.1 (Ironclad Save & UI)
 ;;; Commands: DHS = open scanner & fix dashboard
 ;;; ============================================================
 (vl-load-com)
@@ -29,9 +29,19 @@
     ((>= score 6) "[WARN]")
     (t            "[FAIL]")))
 
-(defun dhs:get-file-kb (/ fname)
-  (setq fname (findfile (getvar "DWGNAME")))
-  (if fname (fix (/ (float (vl-file-size fname)) 1024)) 0))
+;; [v5.1] 絕對路徑防呆，確保 100% 抓到檔案大小
+(defun dhs:get-file-kb (/ fpath)
+  (if (= (getvar "DWGTITLED") 1)
+    (progn
+      (setq fpath (strcat (getvar "DWGPREFIX") (getvar "DWGNAME")))
+      (if (findfile fpath)
+        (fix (/ (float (vl-file-size fpath)) 1024))
+        0
+      )
+    )
+    0
+  )
+)
 
 ;;; -- Master Flow Logic ---------------------------------------
 (defun dhs:run-dashboard ( is-postfix /
@@ -68,8 +78,8 @@
     )
   )
 
-  ;; --- 2. Analyzing Data & NEW SCORING LOGIC ---
-  ;; 1. Unused layers (Relaxed: >10 Warn, >30 Fail)
+  ;; --- 2. Analyzing Data & SCORING LOGIC ---
+  ;; 1. Unused layers (>10 Warn, >30 Fail)
   (setq r1 0 tbl (tblnext "LAYER" T))
   (while tbl
     (setq lname (cdr (assoc 2 tbl)))
@@ -78,7 +88,7 @@
     (setq tbl (tblnext "LAYER")))
   (setq s1 (dhs:score-10 r1 10 30))
 
-  ;; 2. Blocks & Anonymous Blocks (Relaxed)
+  ;; 2. Blocks & Anonymous Blocks
   (setq r2 0 r6 0 tbl (tblnext "BLOCK" T))
   (while tbl
     (setq bname (cdr (assoc 2 tbl)) bflags (cdr (assoc 70 tbl)))
@@ -88,18 +98,18 @@
           (if (or (= (substr bname 1 2) "*U") (= (substr bname 1 2) "*D") (= (substr bname 1 2) "*X")) (setq r6 (1+ r6)))
           (if (not (member bname u-blk)) (setq r2 (1+ r2))))))
     (setq tbl (tblnext "BLOCK")))
-  (setq s2 (dhs:score-10 r2 20 50))  ; Normal blocks: >20 Warn, >50 Fail
-  (setq s6 (dhs:score-10 r6 200 500)) ; Anon blocks: >200 Warn, >500 Fail
+  (setq s2 (dhs:score-10 r2 20 50))  
+  (setq s6 (dhs:score-10 r6 200 500)) 
 
-  ;; 3. Layer 0 objects (Dynamic Percentage: >1% Warn, >5% Fail)
+  ;; 3. Layer 0 objects (>1% Warn, >5% Fail)
   (setq r3 lay-0-cnt)
   (setq pct3 (if (> total 0) (fix (* 100.0 (/ (float r3) (float total)))) 0))
   (setq s3 (dhs:score-10 pct3 1 5))
 
-  ;; 4. Text styles (Relaxed: >5 Warn, >10 Fail)
+  ;; 4. Text styles (>5 Warn, >10 Fail)
   (setq r5 (length u-sty) s5 (dhs:score-10 r5 5 10))
 
-  ;; 5. Short Layer names (Relaxed: >10 Warn, >20 Fail)
+  ;; 5. Short Layer names (>10 Warn, >20 Fail)
   (setq r7 0 tbl (tblnext "LAYER" T))
   (while tbl
     (setq lname (cdr (assoc 2 tbl)))
@@ -107,11 +117,11 @@
     (setq tbl (tblnext "LAYER")))
   (setq s7 (dhs:score-10 r7 10 20))
 
-  ;; 6. File Weight (Unchanged)
+  ;; 6. File Weight
   (setq kb8 (dhs:get-file-kb) obj8 total ratio (/ (float kb8) (if (> obj8 0) obj8 1)))
   (setq s8 (cond ((< ratio 1.5) 10) ((< ratio 3.0) 8) ((< ratio 6.0) 6) ((< ratio 10.0) 4) (t 2))) 
 
-  ;; 7. Xref (Unchanged)
+  ;; 7. Xref
   (setq xr-total 0 xr-bad 0 tbl (tblnext "BLOCK" T))
   (while tbl
     (setq bflags (cdr (assoc 70 tbl)))
@@ -142,7 +152,7 @@
   (setq dcl_file (vl-filename-mktemp "dhs_dash.dcl"))
   (setq fn (open dcl_file "w"))
   (write-line "dhs_dash_dlg : dialog {" fn)
-  (write-line "  label = \"Drawing Health Score Dashboard v5.0\";" fn)
+  (write-line "  label = \"Drawing Health Score Dashboard v5.1\";" fn) ; <-- 認明 5.1 正字標記
   (write-line "  : column {" fn)
   
   (write-line "    : text { key = \"t_score\"; alignment = centered; }" fn)
@@ -190,7 +200,7 @@
   
   (set_tile "t_1" (strcat (dhs:tag s1) " Unused layers: " (itoa r1)))
   (set_tile "t_2" (strcat (dhs:tag s2) " Unpurged blocks: " (itoa r2)))
-  (set_tile "t_3" (strcat (dhs:tag s3) " Layer 0 objects: " (itoa r3) "  (" (itoa pct3) "%)")) ;; NOW SHOWS PERCENTAGE
+  (set_tile "t_3" (strcat (dhs:tag s3) " Layer 0 objects: " (itoa r3) "  (" (itoa pct3) "%)")) 
   (set_tile "t_5" (strcat (dhs:tag s5) " Text styles: " (itoa r5) " used"))
   (set_tile "t_6" (strcat (dhs:tag s6) " Anonymous blocks: " (itoa r6)))
   (set_tile "t_7" (strcat (dhs:tag s7) " Short layer names: " (itoa r7)))
@@ -232,7 +242,7 @@
 
           (if (= *dhs-opt-audit* "1") (vla-auditinfo doc :vlax-true))
           
-          ;; 【關鍵修復】強制 AutoCAD 進行完整存檔，釋放硬碟空間
+          ;; 【強制釋放硬碟空間】
           (if (= *dhs-opt-save* "1") 
             (progn
               (setq old-isave (getvar "ISAVEPERCENT"))
@@ -262,5 +272,5 @@
 (defun C:DHSFIX () (C:DHS))
 (defun C:DHSF () (C:DHS))
 
-(princ "\nDrawingHealthScore v5.0 (Dynamic Scoring) loaded. Type DHS to run.")
+(princ "\nDrawingHealthScore v5.1 loaded. Type DHS to run.")
 (princ)
