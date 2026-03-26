@@ -32,12 +32,11 @@ Type `DHS`. A diagnostic dashboard pops up:
 - **8 individual checks** — see exactly what's wrong and how bad it is
 - **Check the fixes you want, click Run Fix Now** — runs silently in the background
 - **Auto re-scans after fixing** — shows exactly how many MB were saved
-
-```
+  
 
 ![DHS Dialog](doc/DHS.png)
 
-```
+
 
 ---
 
