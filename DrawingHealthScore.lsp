@@ -1,13 +1,19 @@
 ;;; ============================================================
 ;;; DrawingHealthScore.lsp  (DHS / DHSFIX)
-;;; Drawing Health Score Tool - Pro v4.2 (UI Layout Optimized)
+;;; Drawing Health Score Tool - Pro v4.3 (Memory & Split Purge)
 ;;; Commands: DHS = open scanner & fix dashboard
 ;;; ============================================================
 (vl-load-com)
 
-;;; -- Global vars for before/after comparison ----------------
+;;; -- Global vars for before/after comparison & Settings Memory --
 (setq *dhs-old-kb* nil)
 (setq *dhs-old-obj* nil)
+
+;; Set default memory states if they don't exist yet
+(if (not *dhs-opt-pblk*) (setq *dhs-opt-pblk* "1"))  ; Default: Purge Blocks (ON)
+(if (not *dhs-opt-play*) (setq *dhs-opt-play* "0"))  ; Default: Purge Layers (OFF - Keep extra layers)
+(if (not *dhs-opt-audit*) (setq *dhs-opt-audit* "1")) ; Default: Audit (ON)
+(if (not *dhs-opt-save*) (setq *dhs-opt-save* "1"))   ; Default: Save (ON)
 
 ;;; -- Scoring helpers ----------------------------------------
 (defun dhs:score-10 (val warn-at fail-at)
@@ -35,7 +41,7 @@
   r1 s1 r2 s2 r3 s3 r5 s5 r6 s6 r7 s7
   s8 kb8 obj8 xr-total xr-bad s9
   tbl lname bflags pct100 saved-kb saved-mb new-mb ratio
-  dcl_file fn dcl_id res do_purge do_audit do_save doc ss-tmp)
+  dcl_file fn dcl_id res doc ss-tmp old-cmd)
 
   (princ "\n>> Scanning drawing data... ")
   
@@ -133,7 +139,7 @@
   (write-line "    : text { key = \"t_status\"; alignment = centered; }" fn)
   (write-line "    spacer;" fn)
   
-  ;; Diagnostic Section (Reordered File Weight to the bottom)
+  ;; Diagnostic Section
   (write-line "    : boxed_column {" fn)
   (write-line "      label = \"Diagnostic Report\";" fn)
   (write-line "      : text { key = \"t_1\"; }" fn)
@@ -142,17 +148,18 @@
   (write-line "      : text { key = \"t_5\"; }" fn)
   (write-line "      : text { key = \"t_6\"; }" fn)
   (write-line "      : text { key = \"t_7\"; }" fn)
-  (write-line "      : text { key = \"t_9\"; }" fn) ; Moved Xref up
-  (write-line "      : text { key = \"t_8\"; }" fn) ; Moved File weight down
-  (write-line "      : text { key = \"t_8b\"; }" fn) ; Space saved message at the absolute bottom
+  (write-line "      : text { key = \"t_9\"; }" fn) 
+  (write-line "      : text { key = \"t_8\"; }" fn) 
+  (write-line "      : text { key = \"t_8b\"; }" fn) 
   (write-line "    }" fn)
   
-  ;; Fix Options Section
+  ;; Fix Options Section (Updated for Split Purge & Memory)
   (write-line "    : boxed_column {" fn)
   (write-line "      label = \"Auto-Fix Settings\";" fn)
-  (write-line "      : toggle { key = \"cb_purge\"; label = \"Deep PURGE (Clean unused layers/blocks)\"; value = \"1\"; }" fn)
-  (write-line "      : toggle { key = \"cb_audit\"; label = \"AUDIT (Fix database errors in background)\"; value = \"1\"; }" fn)
-  (write-line "      : toggle { key = \"cb_save\"; label = \"Auto-Save (Required to calculate MB saved)\"; value = \"1\"; }" fn)
+  (write-line (strcat "      : toggle { key = \"cb_purge_blk\"; label = \"Purge unused BLOCKS (Deep clean nested)\"; value = \"" *dhs-opt-pblk* "\"; }") fn)
+  (write-line (strcat "      : toggle { key = \"cb_purge_lay\"; label = \"Purge unused LAYERS (Uncheck to keep templates)\"; value = \"" *dhs-opt-play* "\"; }") fn)
+  (write-line (strcat "      : toggle { key = \"cb_audit\"; label = \"AUDIT (Fix database errors in background)\"; value = \"" *dhs-opt-audit* "\"; }") fn)
+  (write-line (strcat "      : toggle { key = \"cb_save\"; label = \"Auto-Save (Required to calculate MB saved)\"; value = \"" *dhs-opt-save* "\"; }") fn)
   (write-line "    }" fn)
   
   ;; Custom Buttons
@@ -184,11 +191,12 @@
   (set_tile "t_8" (strcat (dhs:tag s8) " File weight: " new-mb " MB"))
   (set_tile "t_8b" saved-mb)
 
-  ;; Bind Actions
+  ;; Bind Actions (Save states to global variables)
   (action_tile "btn_fix" 
-    "(setq do_purge (atoi (get_tile \"cb_purge\")))
-     (setq do_audit (atoi (get_tile \"cb_audit\")))
-     (setq do_save (atoi (get_tile \"cb_save\")))
+    "(setq *dhs-opt-pblk* (get_tile \"cb_purge_blk\"))
+     (setq *dhs-opt-play* (get_tile \"cb_purge_lay\"))
+     (setq *dhs-opt-audit* (get_tile \"cb_audit\"))
+     (setq *dhs-opt-save* (get_tile \"cb_save\"))
      (done_dialog 1)"
   )
   (action_tile "cancel" "(done_dialog 0)")
@@ -203,16 +211,32 @@
   ;; --- 5. Execute Fixes if Button Clicked ---
   (if (= res 1)
     (progn
-      (if (or (= do_purge 1) (= do_audit 1) (= do_save 1))
+      (if (or (= *dhs-opt-pblk* "1") (= *dhs-opt-play* "1") (= *dhs-opt-audit* "1") (= *dhs-opt-save* "1"))
         (progn
           (princ "\n>> Applying fixes in background... Please wait.")
           (setq *dhs-old-kb* kb8)
           (setq *dhs-old-obj* obj8)
           (setq doc (vla-get-activedocument (vlax-get-acad-object)))
           
-          (if (= do_purge 1) (repeat 3 (vla-purgeall doc)))
-          (if (= do_audit 1) (vla-auditinfo doc :vlax-true))
-          (if (= do_save 1) (command "_.QSAVE") (setq *dhs-old-kb* nil))
+          ;; Silent execution setup
+          (setq old-cmd (getvar "CMDECHO"))
+          (setvar "CMDECHO" 0)
+          
+          ;; Granular Purges (repeated 3 times for nested items)
+          (if (= *dhs-opt-pblk* "1") 
+            (repeat 3 (command "_.-PURGE" "_B" "*" "_N")))
+            
+          (if (= *dhs-opt-play* "1") 
+            (repeat 3 (command "_.-PURGE" "_LA" "*" "_N")))
+            
+          (setvar "CMDECHO" old-cmd)
+
+          ;; Audit & Save
+          (if (= *dhs-opt-audit* "1") (vla-auditinfo doc :vlax-true))
+          (if (= *dhs-opt-save* "1") (command "_.QSAVE") (setq *dhs-old-kb* nil))
+          
+          ;; Push any command line garbage out of sight
+          (repeat 10 (terpri))
           
           ;; Loop back to show updated dashboard
           (dhs:run-dashboard T)
@@ -234,5 +258,5 @@
 (defun C:DHSFIX () (C:DHS))
 (defun C:DHSF () (C:DHS))
 
-(princ "\nDrawingHealthScore v4.2 loaded. Type DHS to open Dashboard.")
+(princ "\nDrawingHealthScore v4.3 (Memory & Split Purge) loaded. Type DHS to open Dashboard.")
 (princ)
