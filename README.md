@@ -34,29 +34,7 @@ Type `DHS`. A diagnostic dashboard pops up:
 - **Auto re-scans after fixing** — shows exactly how many MB were saved
 
 ```
->> Scanning drawing data... Done.
-
-OVERALL SCORE: 64 / 100
-Status: FAIR (Needs attention)
-
-Diagnostic Report
-[GOOD] Unused layers: 3
-[FAIL] Unpurged blocks: 28
-[WARN] Layer 0 objects: 34  (2%)
-[GOOD] Text styles: 2 used
-[GOOD] Anonymous blocks: 12
-[WARN] Short layer names: 4
-[GOOD] Xref issues: None
-[WARN] File weight: 18.4 MB
-
-Auto-Fix Settings
-[x] Purge unused BLOCKS (Deep clean nested)
-[ ] Purge unused LAYERS (Uncheck to keep templates)
-[x] AUDIT (Fix database errors in background)
-[x] Auto-Save (Required to calculate MB saved)
-
->> Space Saved: 6.2 MB !!
->> OVERALL SCORE: 81 / 100  (was 64)
+![BPDF Dialog](docs/dhs.png)
 ```
 
 ---
