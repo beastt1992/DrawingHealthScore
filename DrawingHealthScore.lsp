@@ -1,6 +1,6 @@
 ;;; ============================================================
 ;;; DrawingHealthScore.lsp  (DHS / DHSFIX)
-;;; Drawing Health Score Tool - Pro v4.3 (Memory & Split Purge)
+;;; Drawing Health Score Tool - Pro v5.0 (Dynamic Scoring & True Save)
 ;;; Commands: DHS = open scanner & fix dashboard
 ;;; ============================================================
 (vl-load-com)
@@ -9,11 +9,10 @@
 (setq *dhs-old-kb* nil)
 (setq *dhs-old-obj* nil)
 
-;; Set default memory states if they don't exist yet
-(if (not *dhs-opt-pblk*) (setq *dhs-opt-pblk* "1"))  ; Default: Purge Blocks (ON)
-(if (not *dhs-opt-play*) (setq *dhs-opt-play* "0"))  ; Default: Purge Layers (OFF - Keep extra layers)
-(if (not *dhs-opt-audit*) (setq *dhs-opt-audit* "1")) ; Default: Audit (ON)
-(if (not *dhs-opt-save*) (setq *dhs-opt-save* "1"))   ; Default: Save (ON)
+(if (not *dhs-opt-pblk*) (setq *dhs-opt-pblk* "1"))
+(if (not *dhs-opt-play*) (setq *dhs-opt-play* "0"))
+(if (not *dhs-opt-audit*) (setq *dhs-opt-audit* "1"))
+(if (not *dhs-opt-save*) (setq *dhs-opt-save* "1"))
 
 ;;; -- Scoring helpers ----------------------------------------
 (defun dhs:score-10 (val warn-at fail-at)
@@ -38,10 +37,10 @@
 (defun dhs:run-dashboard ( is-postfix /
   ss i total elist lay typ bname sname
   u-lay u-blk u-sty lay-0-cnt
-  r1 s1 r2 s2 r3 s3 r5 s5 r6 s6 r7 s7
+  r1 s1 r2 s2 r3 s3 pct3 r5 s5 r6 s6 r7 s7
   s8 kb8 obj8 xr-total xr-bad s9
   tbl lname bflags pct100 saved-kb saved-mb new-mb ratio
-  dcl_file fn dcl_id res doc ss-tmp old-cmd)
+  dcl_file fn dcl_id res doc ss-tmp old-cmd old-isave)
 
   (princ "\n>> Scanning drawing data... ")
   
@@ -69,15 +68,17 @@
     )
   )
 
-  ;; --- 2. Analyzing Data ---
+  ;; --- 2. Analyzing Data & NEW SCORING LOGIC ---
+  ;; 1. Unused layers (Relaxed: >10 Warn, >30 Fail)
   (setq r1 0 tbl (tblnext "LAYER" T))
   (while tbl
     (setq lname (cdr (assoc 2 tbl)))
     (if (and (not (equal lname "0")) (not (equal lname "Defpoints")) (not (vl-string-search "|" lname)))
       (if (not (member lname u-lay)) (setq r1 (1+ r1))))
     (setq tbl (tblnext "LAYER")))
-  (setq s1 (dhs:score-10 r1 5 20))
+  (setq s1 (dhs:score-10 r1 10 30))
 
+  ;; 2. Blocks & Anonymous Blocks (Relaxed)
   (setq r2 0 r6 0 tbl (tblnext "BLOCK" T))
   (while tbl
     (setq bname (cdr (assoc 2 tbl)) bflags (cdr (assoc 70 tbl)))
@@ -87,21 +88,30 @@
           (if (or (= (substr bname 1 2) "*U") (= (substr bname 1 2) "*D") (= (substr bname 1 2) "*X")) (setq r6 (1+ r6)))
           (if (not (member bname u-blk)) (setq r2 (1+ r2))))))
     (setq tbl (tblnext "BLOCK")))
-  (setq s2 (dhs:score-10 r2 5 10) s6 (dhs:score-10 r6 20 50))
+  (setq s2 (dhs:score-10 r2 20 50))  ; Normal blocks: >20 Warn, >50 Fail
+  (setq s6 (dhs:score-10 r6 200 500)) ; Anon blocks: >200 Warn, >500 Fail
 
-  (setq r3 lay-0-cnt s3 (dhs:score-10 r3 10 20))
-  (setq r5 (length u-sty) s5 (dhs:score-10 r5 3 5))
+  ;; 3. Layer 0 objects (Dynamic Percentage: >1% Warn, >5% Fail)
+  (setq r3 lay-0-cnt)
+  (setq pct3 (if (> total 0) (fix (* 100.0 (/ (float r3) (float total)))) 0))
+  (setq s3 (dhs:score-10 pct3 1 5))
 
+  ;; 4. Text styles (Relaxed: >5 Warn, >10 Fail)
+  (setq r5 (length u-sty) s5 (dhs:score-10 r5 5 10))
+
+  ;; 5. Short Layer names (Relaxed: >10 Warn, >20 Fail)
   (setq r7 0 tbl (tblnext "LAYER" T))
   (while tbl
     (setq lname (cdr (assoc 2 tbl)))
     (if (and (not (equal lname "0")) (<= (strlen lname) 2) (not (vl-string-search "|" lname))) (setq r7 (1+ r7)))
     (setq tbl (tblnext "LAYER")))
-  (setq s7 (dhs:score-10 r7 3 8))
+  (setq s7 (dhs:score-10 r7 10 20))
 
+  ;; 6. File Weight (Unchanged)
   (setq kb8 (dhs:get-file-kb) obj8 total ratio (/ (float kb8) (if (> obj8 0) obj8 1)))
   (setq s8 (cond ((< ratio 1.5) 10) ((< ratio 3.0) 8) ((< ratio 6.0) 6) ((< ratio 10.0) 4) (t 2))) 
 
+  ;; 7. Xref (Unchanged)
   (setq xr-total 0 xr-bad 0 tbl (tblnext "BLOCK" T))
   (while tbl
     (setq bflags (cdr (assoc 70 tbl)))
@@ -120,6 +130,7 @@
       (setq saved-kb (- *dhs-old-kb* kb8))
       (if (> saved-kb 0)
         (setq saved-mb (strcat "         -> Space Saved: " (rtos (/ (float saved-kb) 1024.0) 2 2) " MB !!"))
+        (setq saved-mb "         -> Space Saved: 0 MB (Already optimized)")
       )
       (setq *dhs-old-kb* nil *dhs-old-obj* nil)
     )
@@ -131,15 +142,13 @@
   (setq dcl_file (vl-filename-mktemp "dhs_dash.dcl"))
   (setq fn (open dcl_file "w"))
   (write-line "dhs_dash_dlg : dialog {" fn)
-  (write-line "  label = \"Drawing Health Score Dashboard\";" fn)
+  (write-line "  label = \"Drawing Health Score Dashboard v5.0\";" fn)
   (write-line "  : column {" fn)
   
-  ;; Score Header
   (write-line "    : text { key = \"t_score\"; alignment = centered; }" fn)
   (write-line "    : text { key = \"t_status\"; alignment = centered; }" fn)
   (write-line "    spacer;" fn)
   
-  ;; Diagnostic Section
   (write-line "    : boxed_column {" fn)
   (write-line "      label = \"Diagnostic Report\";" fn)
   (write-line "      : text { key = \"t_1\"; }" fn)
@@ -153,7 +162,6 @@
   (write-line "      : text { key = \"t_8b\"; }" fn) 
   (write-line "    }" fn)
   
-  ;; Fix Options Section (Updated for Split Purge & Memory)
   (write-line "    : boxed_column {" fn)
   (write-line "      label = \"Auto-Fix Settings\";" fn)
   (write-line (strcat "      : toggle { key = \"cb_purge_blk\"; label = \"Purge unused BLOCKS (Deep clean nested)\"; value = \"" *dhs-opt-pblk* "\"; }") fn)
@@ -162,7 +170,6 @@
   (write-line (strcat "      : toggle { key = \"cb_save\"; label = \"Auto-Save (Required to calculate MB saved)\"; value = \"" *dhs-opt-save* "\"; }") fn)
   (write-line "    }" fn)
   
-  ;; Custom Buttons
   (write-line "    : row {" fn)
   (write-line "      : button { key = \"btn_fix\"; label = \"Run Fix Now\"; is_default = true; }" fn)
   (write-line "      : button { key = \"cancel\"; label = \"Close\"; is_cancel = true; }" fn)
@@ -183,7 +190,7 @@
   
   (set_tile "t_1" (strcat (dhs:tag s1) " Unused layers: " (itoa r1)))
   (set_tile "t_2" (strcat (dhs:tag s2) " Unpurged blocks: " (itoa r2)))
-  (set_tile "t_3" (strcat (dhs:tag s3) " Layer 0 objects: " (itoa r3)))
+  (set_tile "t_3" (strcat (dhs:tag s3) " Layer 0 objects: " (itoa r3) "  (" (itoa pct3) "%)")) ;; NOW SHOWS PERCENTAGE
   (set_tile "t_5" (strcat (dhs:tag s5) " Text styles: " (itoa r5) " used"))
   (set_tile "t_6" (strcat (dhs:tag s6) " Anonymous blocks: " (itoa r6)))
   (set_tile "t_7" (strcat (dhs:tag s7) " Short layer names: " (itoa r7)))
@@ -191,7 +198,7 @@
   (set_tile "t_8" (strcat (dhs:tag s8) " File weight: " new-mb " MB"))
   (set_tile "t_8b" saved-mb)
 
-  ;; Bind Actions (Save states to global variables)
+  ;; Bind Actions
   (action_tile "btn_fix" 
     "(setq *dhs-opt-pblk* (get_tile \"cb_purge_blk\"))
      (setq *dhs-opt-play* (get_tile \"cb_purge_lay\"))
@@ -201,10 +208,7 @@
   )
   (action_tile "cancel" "(done_dialog 0)")
   
-  ;; Start Dialog
   (setq res (start_dialog))
-  
-  ;; Cleanup UI files
   (unload_dialog dcl_id)
   (vl-file-delete dcl_file)
   
@@ -218,27 +222,28 @@
           (setq *dhs-old-obj* obj8)
           (setq doc (vla-get-activedocument (vlax-get-acad-object)))
           
-          ;; Silent execution setup
           (setq old-cmd (getvar "CMDECHO"))
           (setvar "CMDECHO" 0)
           
-          ;; Granular Purges (repeated 3 times for nested items)
-          (if (= *dhs-opt-pblk* "1") 
-            (repeat 3 (command "_.-PURGE" "_B" "*" "_N")))
-            
-          (if (= *dhs-opt-play* "1") 
-            (repeat 3 (command "_.-PURGE" "_LA" "*" "_N")))
+          (if (= *dhs-opt-pblk* "1") (repeat 3 (command "_.-PURGE" "_B" "*" "_N")))
+          (if (= *dhs-opt-play* "1") (repeat 3 (command "_.-PURGE" "_LA" "*" "_N")))
             
           (setvar "CMDECHO" old-cmd)
 
-          ;; Audit & Save
           (if (= *dhs-opt-audit* "1") (vla-auditinfo doc :vlax-true))
-          (if (= *dhs-opt-save* "1") (command "_.QSAVE") (setq *dhs-old-kb* nil))
           
-          ;; Push any command line garbage out of sight
+          ;; 【關鍵修復】強制 AutoCAD 進行完整存檔，釋放硬碟空間
+          (if (= *dhs-opt-save* "1") 
+            (progn
+              (setq old-isave (getvar "ISAVEPERCENT"))
+              (setvar "ISAVEPERCENT" 0) 
+              (command "_.QSAVE")
+              (setvar "ISAVEPERCENT" old-isave)
+            )
+            (setq *dhs-old-kb* nil)
+          )
+          
           (repeat 10 (terpri))
-          
-          ;; Loop back to show updated dashboard
           (dhs:run-dashboard T)
         )
         (princ "\n>> No fix options selected.\n")
@@ -254,9 +259,8 @@
   (repeat 10 (terpri))
   (dhs:run-dashboard nil)
 )
-
 (defun C:DHSFIX () (C:DHS))
 (defun C:DHSF () (C:DHS))
 
-(princ "\nDrawingHealthScore v4.3 (Memory & Split Purge) loaded. Type DHS to open Dashboard.")
+(princ "\nDrawingHealthScore v5.0 (Dynamic Scoring) loaded. Type DHS to run.")
 (princ)
