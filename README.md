@@ -34,7 +34,7 @@ Type `DHS`. A diagnostic dashboard pops up:
 - **Auto re-scans after fixing** — shows exactly how many MB were saved
 
 ```
-![BPDF Dialog](docs/dhs.png)
+![BPDF Dialog](docs/DHS.png)
 ```
 
 ---
