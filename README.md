@@ -17,10 +17,10 @@ Receive drawing from contractor
 → Messy layers, unpurged blocks, objects on Layer 0
 → File keeps getting larger, slower, unstable
 → No idea what's wrong or what to fix first
-→ Run PURGE once but not sure if it did anything
+→ Run PURGE once, not sure if it did anything
 ```
 
-AutoCAD's built-in AUDIT and PURGE are single-point fixes. Nobody has ever put a score on the whole thing. You can't answer the question: *how healthy is this drawing?*
+AutoCAD's built-in AUDIT and PURGE are single-point fixes. Nobody has ever put a score on the whole thing. You can't answer: *how healthy is this drawing?*
 
 ---
 
@@ -31,30 +31,29 @@ Type `DHS`. A diagnostic dashboard pops up:
 - **Overall score 0–100** — know the health of a drawing instantly
 - **8 individual checks** — see exactly what's wrong and how bad it is
 - **Check the fixes you want, click Run Fix Now** — runs silently in the background
-- **Auto re-scans after fixing** — shows how many MB were saved
+- **Auto re-scans after fixing** — shows exactly how many MB were saved
 
 ```
 >> Scanning drawing data... Done.
 
-┌─────────────────────────────────────┐
-│  OVERALL SCORE: 64 / 100            │
-│  Status: FAIR (Needs attention)     │
-├─────────────────────────────────────┤
-│  [GOOD] Unused layers: 3            │
-│  [FAIL] Unpurged blocks: 28         │
-│  [WARN] Layer 0 objects: 34         │
-│  [GOOD] Text styles: 2 used         │
-│  [GOOD] Anonymous blocks: 12        │
-│  [WARN] Short layer names: 4        │
-│  [GOOD] Xref issues: None           │
-│  [WARN] File weight: 18.4 MB        │
-├─────────────────────────────────────┤
-│  Auto-Fix Settings                  │
-│  ☑ Deep PURGE                       │
-│  ☑ AUDIT                            │
-│  ☑ Auto-Save                        │
-│  [ Run Fix Now ]  [ Close ]         │
-└─────────────────────────────────────┘
+OVERALL SCORE: 64 / 100
+Status: FAIR (Needs attention)
+
+Diagnostic Report
+[GOOD] Unused layers: 3
+[FAIL] Unpurged blocks: 28
+[WARN] Layer 0 objects: 34  (2%)
+[GOOD] Text styles: 2 used
+[GOOD] Anonymous blocks: 12
+[WARN] Short layer names: 4
+[GOOD] Xref issues: None
+[WARN] File weight: 18.4 MB
+
+Auto-Fix Settings
+[x] Purge unused BLOCKS (Deep clean nested)
+[ ] Purge unused LAYERS (Uncheck to keep templates)
+[x] AUDIT (Fix database errors in background)
+[x] Auto-Save (Required to calculate MB saved)
 
 >> Space Saved: 6.2 MB !!
 >> OVERALL SCORE: 81 / 100  (was 64)
@@ -83,7 +82,7 @@ The window shows:
 - **Middle:** 8 diagnostic results with [GOOD] / [WARN] / [FAIL] labels
 - **Bottom:** Fix options with checkboxes — click **Run Fix Now** to execute
 
-After fixing, the tool re-scans automatically and shows before/after comparison.
+After fixing, the tool re-scans automatically and shows before/after comparison with MB saved.
 
 ---
 
@@ -99,16 +98,16 @@ After fixing, the tool re-scans automatically and shows before/after comparison.
 
 ## Score Breakdown (8 checks, 10 points each)
 
-| Check | Penalty Threshold |
-|-------|-------------------|
-| Unused layers | Deduct after 5 |
-| Unpurged blocks | Deduct after 5 |
-| Layer 0 objects | Deduct after 10 |
-| Text styles | Deduct after 3 styles |
-| Anonymous blocks | Deduct after 20 |
-| Short layer names | Deduct after 3 |
-| Xref status | Any unresolved xref = deduction |
-| File weight | Based on KB-per-object ratio |
+| Check | Warn | Fail |
+|-------|------|------|
+| Unused layers | > 10 | > 30 |
+| Unpurged blocks | > 20 | > 50 |
+| Layer 0 objects | > 1% of total | > 5% of total |
+| Text styles | > 5 | > 10 |
+| Anonymous blocks | > 200 | > 500 |
+| Short layer names | > 10 | > 20 |
+| Xref status | — | any unresolved |
+| File weight | > 3 KB/obj | > 6 KB/obj |
 
 ---
 
@@ -116,9 +115,12 @@ After fixing, the tool re-scans automatically and shows before/after comparison.
 
 | Option | Details |
 |--------|---------|
-| Deep PURGE | Runs `vla-purgeall` 3 times — more thorough than the PURGE command |
+| Purge unused BLOCKS | Runs `-PURGE B` 3 times — deep nested clean |
+| Purge unused LAYERS | Runs `-PURGE LA` 3 times — uncheck to preserve template layers |
 | AUDIT | Fixes drawing database errors silently in background |
-| Auto-Save | Saves after fixing so MB saved can be calculated |
+| Auto-Save | Sets `ISAVEPERCENT=0` before saving to force full rewrite and maximum file size reduction |
+
+**Settings are remembered** between runs — your checkbox choices persist for the session.
 
 ---
 
@@ -137,8 +139,8 @@ Also works with BricsCAD, GstarCAD, and other AutoLISP-compatible CAD platforms.
 
 | Version | Notes |
 |---------|-------|
-| v4.3 | Separated Purge options for blocks and layers. Added memory for last-used settings. |
-| v4.2 | Unified dashboard — diagnostics + fix options in one window, MB savings display |
+| v5.1 | Absolute path fix for file size detection, `ISAVEPERCENT=0` for maximum space savings, split PURGE into Blocks / Layers, settings memory across runs |
+| v4.2 | Unified dashboard — diagnostics + fix in one window, MB savings display |
 | v3.0 | Dynamic DCL generation, independent fix checkboxes |
 | v1.0 | Command-line output version |
 
