@@ -20,7 +20,7 @@
 → PURGE 跑一下但也不確定有沒有效
 ```
 
-AutoCAD 內建的 AUDIT / PURGE 只能單點修復，沒有人做過「整體評分」這一層。你無法回答「這張圖到底有多健康」。
+AutoCAD 內建的 AUDIT / PURGE 只能單點修復，沒有人做過「整體評分」這一層。你無法回答：「這張圖到底有多健康？」
 
 ---
 
@@ -36,25 +36,24 @@ AutoCAD 內建的 AUDIT / PURGE 只能單點修復，沒有人做過「整體評
 ```
 >> Scanning drawing data... Done.
 
-┌─────────────────────────────────────┐
-│  OVERALL SCORE: 64 / 100            │
-│  Status: FAIR (Needs attention)     │
-├─────────────────────────────────────┤
-│  [GOOD] Unused layers: 3            │
-│  [FAIL] Unpurged blocks: 28         │
-│  [WARN] Layer 0 objects: 34         │
-│  [GOOD] Text styles: 2 used         │
-│  [GOOD] Anonymous blocks: 12        │
-│  [WARN] Short layer names: 4        │
-│  [GOOD] Xref issues: None           │
-│  [WARN] File weight: 18.4 MB        │
-├─────────────────────────────────────┤
-│  Auto-Fix Settings                  │
-│  ☑ Deep PURGE                       │
-│  ☑ AUDIT                            │
-│  ☑ Auto-Save                        │
-│  [ Run Fix Now ]  [ Close ]         │
-└─────────────────────────────────────┘
+OVERALL SCORE: 64 / 100
+Status: FAIR (Needs attention)
+
+Diagnostic Report
+[GOOD] Unused layers: 3
+[FAIL] Unpurged blocks: 28
+[WARN] Layer 0 objects: 34  (2%)
+[GOOD] Text styles: 2 used
+[GOOD] Anonymous blocks: 12
+[WARN] Short layer names: 4
+[GOOD] Xref issues: None
+[WARN] File weight: 18.4 MB
+
+Auto-Fix Settings
+[x] Purge unused BLOCKS (Deep clean nested)
+[ ] Purge unused LAYERS (Uncheck to keep templates)
+[x] AUDIT (Fix database errors in background)
+[x] Auto-Save (Required to calculate MB saved)
 
 >> Space Saved: 6.2 MB !!
 >> OVERALL SCORE: 81 / 100  (was 64)
@@ -79,9 +78,9 @@ AutoCAD 內建的 AUDIT / PURGE 只能單點修復，沒有人做過「整體評
 
 掃描完成後視窗顯示：
 
-- 頂部：整體分數與狀態
-- 中間：8 項診斷結果，含 [GOOD] / [WARN] / [FAIL] 標籤
-- 底部：修復選項勾選，按 **Run Fix Now** 執行
+- **頂部：** 整體分數與狀態
+- **中間：** 8 項診斷結果，含 [GOOD] / [WARN] / [FAIL] 標籤
+- **底部：** 修復選項勾選，按 **Run Fix Now** 執行
 
 修復完成後自動重新掃描，顯示前後對比與節省空間。
 
@@ -99,16 +98,16 @@ AutoCAD 內建的 AUDIT / PURGE 只能單點修復，沒有人做過「整體評
 
 ## 評分項目（共 8 項，每項 10 分）
 
-| 項目 | 扣分條件 |
-|------|---------|
-| Unused layers | 超過 5 個開始扣分 |
-| Unpurged blocks | 超過 5 個開始扣分 |
-| Layer 0 objects | 超過 10 個開始扣分 |
-| Text styles | 超過 3 種開始扣分 |
-| Anonymous blocks | 超過 20 個開始扣分 |
-| Short layer names | 超過 3 個開始扣分 |
-| Xref status | 有未解析 Xref 即扣分 |
-| File weight | 依每物件平均 KB 比例計算 |
+| 項目 | 警告門檻 | 扣分門檻 |
+|------|---------|---------|
+| Unused layers | > 10 個 | > 30 個 |
+| Unpurged blocks | > 20 個 | > 50 個 |
+| Layer 0 objects | > 總物件 1% | > 總物件 5% |
+| Text styles | > 5 種 | > 10 種 |
+| Anonymous blocks | > 200 個 | > 500 個 |
+| Short layer names | > 10 個 | > 20 個 |
+| Xref status | — | 有未解析即扣 |
+| File weight | > 3 KB/物件 | > 6 KB/物件 |
 
 ---
 
@@ -116,9 +115,12 @@ AutoCAD 內建的 AUDIT / PURGE 只能單點修復，沒有人做過「整體評
 
 | 選項 | 說明 |
 |------|------|
-| Deep PURGE | `vla-purgeall` 執行 3 次，比 PURGE 指令更徹底 |
-| AUDIT | 背景修復圖檔資料庫錯誤 |
-| Auto-Save | 修復後自動存檔，並計算節省了多少 MB |
+| Purge unused BLOCKS | `-PURGE B` 執行 3 次，深度清除巢狀 Block |
+| Purge unused LAYERS | `-PURGE LA` 執行 3 次，保留模板圖層時取消勾選 |
+| AUDIT | 背景靜默修復圖檔資料庫錯誤 |
+| Auto-Save | 存檔前將 `ISAVEPERCENT` 設為 0，強制完整寫入，最大化節省空間 |
+
+**設定會記憶**：每次開啟 Dashboard，上次的勾選狀態會保留。
 
 ---
 
@@ -129,13 +131,15 @@ AutoCAD 內建的 AUDIT / PURGE 只能單點修復，沒有人做過「整體評
 | AutoCAD 2014+ | ✅ 支援 |
 | 2014 以下 | 未測試 |
 
+也適用於 BricsCAD、GstarCAD 等支援 AutoLISP 的 CAD 平台。
+
 ---
 
 ## 版本紀錄
 
 | 版本 | 說明 |
 |------|------|
-| v4.3 | 將清理圖塊與圖層選項獨立（保護預設樣板），並加入勾選狀態記憶功能 |
+| v5.1 | 絕對路徑修正確保檔案大小正確讀取、`ISAVEPERCENT=0` 最大化節省空間、PURGE 分 Block / Layer 兩個選項、設定記憶 |
 | v4.2 | 單一 Dashboard 視窗整合診斷 + 修復，MB 節省顯示 |
 | v3.0 | DCL 動態生成，修復選項獨立 checkbox |
 | v1.0 | 命令列輸出版本 |
