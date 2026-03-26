@@ -137,6 +137,7 @@ Also works with BricsCAD, GstarCAD, and other AutoLISP-compatible CAD platforms.
 
 | Version | Notes |
 |---------|-------|
+| v4.3 | Separated Purge options for blocks and layers. Added memory for last-used settings. |
 | v4.2 | Unified dashboard — diagnostics + fix options in one window, MB savings display |
 | v3.0 | Dynamic DCL generation, independent fix checkboxes |
 | v1.0 | Command-line output version |
